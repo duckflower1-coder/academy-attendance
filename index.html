@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>출결관리 (원장용)</title>
+<link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.json">
+</head>
+<body>
+
+<!-- 로그인 -->
+<div id="loginView" class="hidden">
+  <form class="login" id="loginForm">
+    <h1 id="loginTitle">출결관리 로그인</h1>
+    <input type="email" id="email" placeholder="이메일" autocomplete="username" required>
+    <input type="password" id="pw" placeholder="비밀번호" autocomplete="current-password" required>
+    <button type="submit">로그인</button>
+    <div class="err" id="loginErr"></div>
+    <p class="muted" style="margin:0;text-align:center">버스 탑승시스템 관리자 계정으로 로그인하세요</p>
+  </form>
+</div>
+
+<!-- 설정 안내 -->
+<div id="setupView" class="hidden">
+  <div class="login">
+    <h1>초기 설정이 필요해요</h1>
+    <p class="muted">config.js 파일에 Supabase 주소(URL)와 anon key 를 넣어주세요. 자세한 방법은 README 를 참고하세요.</p>
+  </div>
+</div>
+
+<!-- 메인 -->
+<div id="appView" class="hidden">
+  <header class="top">
+    <h1 id="title">출결관리</h1>
+    <span class="clock" id="clock"></span>
+    <button class="ghost sm" id="logoutBtn">로그아웃</button>
+  </header>
+  <nav class="tabs">
+    <button data-tab="today" class="on">오늘 출결</button>
+    <button data-tab="records">출결 기록</button>
+    <button data-tab="students">학생 관리</button>
+  </nav>
+
+  <!-- 오늘 출결 -->
+  <section class="wrap" id="tab-today">
+    <div class="stats">
+      <div class="stat in"><span class="muted">수업 중</span><b id="cIn">0</b></div>
+      <div class="stat out"><span class="muted">하원</span><b id="cOut">0</b></div>
+      <div class="stat none"><span class="muted">미등원</span><b id="cNone">0</b></div>
+    </div>
+    <div class="toolbar">
+      <input id="search" placeholder="학생 이름 검색">
+      <select id="classFilter"><option value="">전체 반</option></select>
+    </div>
+    <p class="muted" style="margin:-4px 0 12px">학생 카드를 누르면 <b style="color:var(--in)">등원</b> → 다시 누르면 <b style="color:var(--out)">하원</b> 처리되고 학부모에게 알림이 갑니다.</p>
+    <div class="grid" id="grid"></div>
+    <p class="muted hidden" id="emptyMsg"></p>
+  </section>
+
+  <!-- 출결 기록 -->
+  <section class="wrap hidden" id="tab-records">
+    <div class="panel">
+      <div class="toolbar" style="margin:0">
+        <input type="date" id="recDate">
+        <button class="ghost" id="csvBtn">이 달 기록 엑셀(CSV) 받기</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2 id="recTitle">기록</h2>
+      <p class="muted">시간을 잘못 눌렀다면 여기서 직접 고칠 수 있어요. (고쳐도 학부모 알림은 다시 가지 않습니다)</p>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>학생</th><th>등원</th><th>하원</th><th></th></tr></thead>
+        <tbody id="recBody"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- 학생 관리 -->
+  <section class="wrap hidden" id="tab-students">
+    <div class="panel">
+      <h2>학생 등록</h2>
+      <form class="form" id="addForm">
+        <input id="nName" placeholder="이름 *" required>
+        <input id="nClass" placeholder="반 (예: 초5 수학)">
+        <input id="nPhone" placeholder="학부모 연락처" inputmode="tel">
+        <input id="nMemo" placeholder="메모">
+        <button type="submit">등록</button>
+      </form>
+    </div>
+    <div class="panel">
+      <h2>학생 목록 <span class="muted" id="stuCount"></span></h2>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>이름</th><th>반</th><th>연락처</th><th>학부모 안내</th><th></th></tr></thead>
+        <tbody id="stuBody"></tbody>
+      </table></div>
+    </div>
+  </section>
+</div>
+
+<div id="toast" class="hidden"><span id="toastMsg"></span><button id="toastUndo" class="hidden">되돌리기</button></div>
+<div id="modalBg" class="modal-bg hidden"><div class="modal" id="modal"></div></div>
+
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script src="common.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>

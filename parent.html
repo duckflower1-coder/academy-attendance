@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>등·하원 확인</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="pwrap">
+  <p class="muted" id="academy" style="text-align:center;margin:4px 0 12px"></p>
+
+  <div class="hero" id="hero"><p class="muted">불러오는 중…</p></div>
+
+  <div class="panel" id="notiPanel">
+    <h2>🔔 등·하원 알림 받기 (무료)</h2>
+    <p class="muted" style="margin-top:0">한 번만 설정하면 아이가 등원/하원할 때 휴대폰으로 바로 알림이 옵니다.</p>
+    <ol class="steps">
+      <li><b>ntfy</b> 앱 설치:
+        <a href="https://play.google.com/store/apps/details?id=io.heckel.ntfy" target="_blank">안드로이드</a> ·
+        <a href="https://apps.apple.com/app/ntfy/id1625396347" target="_blank">아이폰</a></li>
+      <li>앱 설치 후 아래 <b>구독하기</b> 버튼을 누르세요.<br>
+        <a class="btn" id="subBtn" href="#">구독하기</a></li>
+      <li>버튼이 안 되면 앱에서 <b>＋</b> 를 누르고 아래 주제명을 붙여넣으세요.<br>
+        <code id="topic"></code> <button class="ghost sm" id="cpTopic">복사</button></li>
+    </ol>
+    <p class="muted">앱 알림 권한을 꼭 ‘허용’해 주세요.</p>
+  </div>
+
+  <div class="panel">
+    <h2>최근 기록</h2>
+    <ul class="hist" id="hist"></ul>
+  </div>
+  <p class="muted" style="text-align:center" id="updated"></p>
+</div>
+
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/dist/umd/supabase.js"></script>
+<script src="common.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const code = new URLSearchParams(location.search).get("c") || "";
+const academy = CFG.ACADEMY_NAME || "학원";
+$("#academy").textContent = academy;
+document.title = `${academy} 등·하원 확인`;
+
+if (!isConfigured()) {
+  $("#hero").innerHTML = `<p class="muted">아직 시스템 설정이 완료되지 않았어요.</p>`;
+} else if (!code) {
+  $("#hero").innerHTML = `<p class="muted">학원에서 받은 링크로 접속해 주세요.</p>`;
+  $("#notiPanel").classList.add("hidden");
+} else {
+  const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
+  const topic = ntfyTopic(code);
+  $("#topic").textContent = topic;
+  const host = ntfyServer().replace(/^https?:\/\//, "");
+  $("#subBtn").href = `ntfy://${host}/${topic}`;
+  $("#cpTopic").onclick = async () => { try { await navigator.clipboard.writeText(topic); $("#cpTopic").textContent = "복사됨"; } catch { prompt("복사하세요", topic); } };
+
+  async function load() {
+    const { data, error } = await sb.rpc("att_parent_view", { p_code: code });
+    if (error) { $("#updated").textContent = "불러오기 실패, 잠시 후 다시 시도합니다."; return; }
+    if (!data) {
+      $("#hero").innerHTML = `<p class="muted">링크가 올바르지 않아요. 학원에 문의해 주세요.</p>`;
+      $("#notiPanel").classList.add("hidden"); return;
+    }
+    const today = todayKST();
+    const todays = data.logs.filter(l => l.log_date === today);
+    const last = todays[0]; // 최신순
+    let st = "none", label = "아직 등원 전이에요";
+    if (last && last.check_in && !last.check_out) { st = "in"; label = "학원에서 수업 중"; }
+    else if (last && last.check_out) { st = "out"; label = "하원했어요"; }
+    const firstIn = todays.length ? todays[todays.length - 1].check_in : null;
+    document.title = `${data.name} · ${academy}`;
+    $("#hero").innerHTML = `
+      <div class="who">${esc(data.name)}</div>
+      <div class="muted">${esc(data.class_name || "")} · ${dateKo(today)}</div>
+      <div class="now ${st}">${label}</div>
+      <div class="times">
+        <div><span class="muted">등원</span><b>${last ? hmKo(last.check_in) || "-" : "-"}</b></div>
+        <div><span class="muted">하원</span><b>${last ? hmKo(last.check_out) || "-" : "-"}</b></div>
+      </div>
+      ${todays.length > 1 ? `<p class="muted">오늘 ${todays.length}회 출입 · 첫 등원 ${hmKo(firstIn)}</p>` : ""}`;
+    $("#hist").innerHTML = data.logs.length ? data.logs.map(l => `<li>
+        <span>${dateKo(l.log_date)}</span>
+        <span>${hm(l.check_in) || "-"} → ${hm(l.check_out) || (l.log_date === today ? "수업 중" : "-")}</span></li>`).join("")
+      : `<li class="muted">최근 60일 기록이 없어요.</li>`;
+    $("#updated").textContent = `마지막 확인 ${hm(new Date())} · 30초마다 자동 새로고침`;
+  }
+  load();
+  setInterval(load, 30000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
+}
+</script>
+</body>
+</html>
