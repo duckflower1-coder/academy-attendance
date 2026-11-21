@@ -2,6 +2,7 @@
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
 let sb, students = [], logs = [], curDate = todayKST();
+var inRecovery = false;
 
 const UNDO_MS = 5000; // 되돌리기 가능 시간 (이 시간 후 학부모 알림 발송)
 
@@ -10,16 +11,21 @@ $("#title").textContent = `${CFG.ACADEMY_NAME || "학원"} 출결관리`;
 $("#loginTitle").textContent = `${CFG.ACADEMY_NAME || "학원"} 출결관리`;
 
 function show(id) {
-  ["#loginView", "#setupView", "#appView"].forEach(v => $(v).classList.toggle("hidden", v !== id));
+  ["#loginView", "#resetView", "#setupView", "#appView"].forEach(v => $(v).classList.toggle("hidden", v !== id));
 }
 
 // ---------- 시작 ----------
 (async function init() {
   if (!isConfigured()) return show("#setupView");
+  const recovering = /type=recovery/.test(location.hash);
   sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
+  sb.auth.onAuthStateChange((ev, s) => {
+    if (ev === "SIGNED_OUT") show("#loginView");
+    if (ev === "PASSWORD_RECOVERY") { inRecovery = true; show("#resetView"); }
+  });
   const { data: { session } } = await sb.auth.getSession();
+  if (recovering || inRecovery) { inRecovery = true; return show("#resetView"); }
   session ? startApp() : show("#loginView");
-  sb.auth.onAuthStateChange((ev, s) => { if (ev === "SIGNED_OUT") show("#loginView"); });
 })();
 
 $("#loginForm").addEventListener("submit", async e => {
@@ -302,3 +308,53 @@ function editModal(s) {
     closeModal(); toast("저장했어요"); await loadStudents(); renderToday();
   };
 }
+
+// ---------- 비밀번호 찾기 / 재설정 / 변경 ----------
+$("#forgotBtn").onclick = async () => {
+  const email = $("#email").value.trim();
+  if (!email) { $("#loginErr").textContent = "위 칸에 이메일을 먼저 입력한 뒤 눌러주세요."; return; }
+  $("#forgotBtn").disabled = true;
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  $("#forgotBtn").disabled = false;
+  $("#loginErr").textContent = error ? "메일 발송 실패: " + error.message
+    : "비밀번호 재설정 메일을 보냈어요. 메일의 링크를 누르면 새 비밀번호를 정할 수 있어요.";
+};
+
+$("#resetForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const p1 = $("#np1").value, p2 = $("#np2").value;
+  if (p1.length < 6) { $("#resetErr").textContent = "6자 이상 입력하세요."; return; }
+  if (p1 !== p2) { $("#resetErr").textContent = "두 비밀번호가 서로 달라요."; return; }
+  const { error } = await sb.auth.updateUser({ password: p1 });
+  if (error) { $("#resetErr").textContent = "변경 실패: " + error.message; return; }
+  inRecovery = false;
+  history.replaceState(null, "", location.pathname);
+  alert("비밀번호를 변경했어요.");
+  startApp();
+});
+
+$("#pwBtn").onclick = () => {
+  openModal(`<h3>비밀번호 변경</h3>
+    <div style="display:grid;gap:8px">
+      <input type="password" id="cp0" placeholder="현재 비밀번호" autocomplete="current-password">
+      <input type="password" id="cp1" placeholder="새 비밀번호 (6자 이상)" autocomplete="new-password">
+      <input type="password" id="cp2" placeholder="새 비밀번호 확인" autocomplete="new-password">
+      <div class="err" id="cpErr"></div>
+      <p class="muted" style="margin:0">버스 탑승시스템과 같은 계정이라 그쪽 비밀번호도 함께 바뀌어요.</p>
+      <div class="row"><button id="cpSave">변경</button><button class="ghost" id="cl">취소</button></div>
+    </div>`);
+  $("#cl").onclick = closeModal;
+  $("#cpSave").onclick = async () => {
+    const p0 = $("#cp0").value, p1 = $("#cp1").value, p2 = $("#cp2").value;
+    if (p1.length < 6) { $("#cpErr").textContent = "새 비밀번호는 6자 이상이어야 해요."; return; }
+    if (p1 !== p2) { $("#cpErr").textContent = "새 비밀번호 두 칸이 서로 달라요."; return; }
+    $("#cpSave").disabled = true;
+    const { data: { user } } = await sb.auth.getUser();
+    const chk = await sb.auth.signInWithPassword({ email: user.email, password: p0 });
+    if (chk.error) { $("#cpErr").textContent = "현재 비밀번호가 맞지 않아요."; $("#cpSave").disabled = false; return; }
+    const { error } = await sb.auth.updateUser({ password: p1 });
+    $("#cpSave").disabled = false;
+    if (error) { $("#cpErr").textContent = "변경 실패: " + error.message; return; }
+    closeModal(); toast("비밀번호를 변경했어요");
+  };
+};
