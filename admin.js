@@ -272,9 +272,10 @@ $("#modalBg").onclick = e => { if (e.target.id === "modalBg") closeModal(); };
 function shareModal(s) {
   const url = parentUrl(s.parent_code);
   const academy = CFG.ACADEMY_NAME || "학원";
-  const msg = `[${academy}] ${s.name} 학생 등·하원 확인 페이지입니다.\n${url}\n\n페이지 안의 ‘알림 받기’를 설정하시면 등원/하원 시 휴대폰으로 바로 알림이 갑니다.`;
-  openModal(`<h3>${esc(s.name)} 학부모 안내</h3>
-    <p class="muted">학부모님께 아래 링크를 보내거나 QR을 찍게 해주세요.</p>
+  const msg = `[${academy}] ${students.filter(x => x.parent_code === s.parent_code).map(x => x.name).join("·")} 학생 등·하원 확인 페이지입니다.\n${url}\n\n페이지 안의 ‘알림 받기’를 설정하시면 등원/하원 시 휴대폰으로 바로 알림이 갑니다.`;
+  const sibs = students.filter(x => x.parent_code === s.parent_code).map(x => x.name);
+  openModal(`<h3>${esc(sibs.join(" · "))} 학부모 안내</h3>
+    <p class="muted">학부모님께 아래 링크를 보내거나 QR을 찍게 해주세요.${sibs.length > 1 ? `<br><b>형제 묶음:</b> 링크 1개·알림 구독 1번으로 ${esc(sibs.join(", "))} 모두 확인됩니다.` : ""}</p>
     <div class="qr"><img src="${qrDataUrl(url)}" alt="QR"></div>
     <p><code>${esc(url)}</code></p>
     <div class="row">
@@ -291,18 +292,32 @@ function shareModal(s) {
 }
 
 function editModal(s) {
+  const cur = students.filter(x => x.id !== s.id && x.parent_code === s.parent_code);
   openModal(`<h3>학생 정보 수정</h3>
     <div style="display:grid;gap:8px">
       <input id="eName" value="${esc(s.name)}" placeholder="이름">
       <input id="eClass" value="${esc(s.class_name || "")}" placeholder="반">
       <input id="ePhone" value="${esc(s.parent_phone || "")}" placeholder="학부모 연락처">
       <input id="eMemo" value="${esc(s.memo || "")}" placeholder="메모">
+      <label class="muted">형제·자매 묶기 (같은 학부모 링크·알림)</label>
+      <select id="eSib">
+        <option value="">${cur.length ? `현재 묶음 유지 (${esc(cur.map(x => x.name).join(", "))})` : "묶지 않음"}</option>
+        ${cur.length ? `<option value="__none">묶음 해제 (따로 받기)</option>` : ""}
+        ${students.filter(x => x.id !== s.id && x.parent_code !== s.parent_code).map(x => `<option value="${x.id}">${esc(x.name)} (${esc(x.class_name || "")})와 묶기</option>`).join("")}
+      </select>
       <div class="row"><button id="sv">저장</button><button class="ghost" id="cl">취소</button></div>
     </div>`);
   $("#cl").onclick = closeModal;
   $("#sv").onclick = async () => {
     const patch = { name: $("#eName").value.trim(), class_name: $("#eClass").value.trim(), parent_phone: $("#ePhone").value.trim(), memo: $("#eMemo").value.trim() };
     if (!patch.name) return;
+    const sib = $("#eSib").value;
+    if (sib === "__none") patch.parent_code = [...crypto.getRandomValues(new Uint8Array(9))].map(b => b.toString(16).padStart(2, "0")).join("");
+    else if (sib) {
+      const t = students.find(x => x.id === sib);
+      patch.parent_code = t.parent_code;
+      if (!patch.parent_phone && t.parent_phone) patch.parent_phone = t.parent_phone;
+    }
     const { error } = await sb.from("att_students").update(patch).eq("id", s.id);
     if (error) return toast(error.message);
     closeModal(); toast("저장했어요"); await loadStudents(); renderToday();
